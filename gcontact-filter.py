@@ -36,6 +36,13 @@ def format_phone(value):
     """
     Format phone numbers
     """
+    # Skip spaces and parenthesis
+    for char in (' ', '(', ')'):
+        value = value.replace(char, '')
+    # International numbers to local (french)
+    value = value.replace('+33', '0')
+    # Restore multiple item values
+    value = value.replace(':::', ' ::: ')
     return value
 
 
@@ -188,19 +195,6 @@ class GoogleContact(object):
         self.data = data
         self.logger.info('File columns are:\n%s', "\n".join(self.data.headers))
 
-    def delete_empty_columns(self):
-        """
-        Delete empty columns to speed up data manipulation
-        """
-        self.logger.info('Will delete empty columns')
-
-        self.filtered_data = copy.copy(self.data)
-
-        for column in self.data.headers:
-            if not len([val for val in self.data[column] if val]):
-                self.logger.debug('Will delete column %s', column)
-                del(self.filtered_data[column])
-
     def filter(self, filters=list()):
         """
         We only consider rows containing data at least for one of the selected
@@ -209,9 +203,9 @@ class GoogleContact(object):
         self.logger.info('Will filter data based on : %s', ", ".join(filters))
 
         filtered_data = GoogleContactDataset()
-        filtered_data.headers = copy.copy(self.filtered_data.headers)
+        filtered_data.headers = copy.copy(self.data.headers)
 
-        for index, row in enumerate(self.filtered_data._data):
+        for index, row in enumerate(self.data._data):
             skip = False
             gRow = GoogleContactRow(headers=filtered_data.headers, row=row)
 
@@ -258,9 +252,6 @@ def main(argv=None):
     gcontact = GoogleContact(
         arguments.get('CSV'),
         debug=arguments.get('--debug'))
-
-    # Delete empty columns
-    gcontact.delete_empty_columns()
 
     # Core part: filtering
     gcontact.filter((
