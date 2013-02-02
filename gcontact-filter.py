@@ -84,23 +84,6 @@ class GoogleContactRow(Row):
         return self.has_fields(fields, callbacks)
 
 
-class GoogleContactDataset(Dataset):
-    """
-    Google Contact Dataset
-
-    Add tag methods for Dataset rows
-    """
-
-    def __init__(self, *args, **kwargs):
-
-        super(GoogleContactDataset, self).__init__(*args, **kwargs)
-        self._data = list(GoogleContactRow(arg) for arg in args)
-
-    def __setitem__(self, key, value):
-        self._validate(value)
-        self._data[key] = GoogleContactRow(value)
-
-
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
@@ -180,7 +163,7 @@ class GoogleContact(object):
             'csv_path': self.csv_path}
         )
 
-        data = GoogleContactDataset()
+        data = Dataset()
 
         with open(self.csv_path, 'rb') as csv_file:
 
@@ -202,7 +185,7 @@ class GoogleContact(object):
         """
         self.logger.info('Will filter data based on : %s', ", ".join(filters))
 
-        filtered_data = GoogleContactDataset()
+        filtered_data = Dataset()
         filtered_data.headers = copy.copy(self.data.headers)
 
         for index, row in enumerate(self.data._data):
