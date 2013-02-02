@@ -4,11 +4,12 @@
 """Google Contacts Filter
 
 Usage:
-    gcontacts-filter.py [-ehv] CSV
+    gcontacts-filter.py [-ehdv] CSV
 
 Options:
     -e --export     Export filtered address book.
     -h --help       Show this screen.
+    -d --debug      Debug mode.
     -v --version    Show version.
 
 """
@@ -24,6 +25,20 @@ from docopt import docopt
 from tablib.core import Row, Dataset
 
 
+__title__ = 'gcontact-filter'
+__version__ = '0.1.1'
+__author__ = 'Julien Maupetit'
+__license__ = 'MIT'
+__copyright__ = 'Copyright 2013 Julien Maupetit'
+
+
+def format_phone(value):
+    """
+    Format phone numbers
+    """
+    return value
+
+
 class GoogleContactRow(Row):
     """
     Add tag methods for rows
@@ -34,24 +49,32 @@ class GoogleContactRow(Row):
         super(GoogleContactRow, self).__init__(row=row, tags=tags)
         self.headers = headers
 
-    def has_fields(self, fields):
+    def has_fields(self, fields, callbacks=list()):
+        """
+        Check whether the current line has a data in fields. Apply
+        callbacks if True.
+        """
+        has = False
         for field in fields:
             index = self.headers.index(field)
             if self._row[index].strip():
-                return True
-        return False
+                has = True
+                for callback in callbacks:
+                    self._row[index] = eval('%s("%s")' % (
+                        callback, self._row[index]))
+        return has
 
     def has_name(self):
         fields = ('Name',)
         return self.has_fields(fields)
 
-    def has_phone(self):
+    def has_phone(self, callbacks=('format_phone',)):
         fields = (
             'Phone 1 - Value',
             'Phone 2 - Value',
             'Phone 3 - Value',
         )
-        return self.has_fields(fields)
+        return self.has_fields(fields, callbacks)
 
 
 class GoogleContactDataset(Dataset):
@@ -74,14 +97,15 @@ class GoogleContactDataset(Dataset):
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
-    def __init__(self, csv_path):
-
-        # set the logger
-        self._set_logger()
+    def __init__(self, csv_path, debug=False):
 
         # Set object attributes
         self.csv_path = csv_path
         self.data = None
+        self.debug = debug
+
+        # set the logger
+        self._set_logger()
 
         # Google exports with UTF-16 encoding
         # hence, force utf-8 encoding
@@ -97,7 +121,10 @@ class GoogleContact(object):
 
         # Set the logger
         self.logger = logging.getLogger('google-contact')
-        self.logger.setLevel(logging.DEBUG)
+        if self.debug:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.INFO)
 
         # create console handler and set level to debug
         ch = logging.StreamHandler()
@@ -185,17 +212,20 @@ class GoogleContact(object):
         filtered_data.headers = copy.copy(self.filtered_data.headers)
 
         for index, row in enumerate(self.filtered_data._data):
-            skip = True
+            skip = False
             gRow = GoogleContactRow(headers=filtered_data.headers, row=row)
 
             # Apply filters
-            for _filter in filters:
+            tests = [True] * len(filters)
+            for i, _filter in enumerate(filters):
                 # This row contains data for selected field
                 if getattr(gRow, _filter)():
-                    skip = False
-                    break
+                    tests[i] = False
+            if True in tests:
+                skip = True
             if skip:
-                self.logger.debug('Skip filtered row %d', index)
+                self.logger.debug(
+                    'Skip filtered row %d %s\n%s', index, str(tests), row)
                 continue
 
             filtered_data.append(gRow)
@@ -220,18 +250,22 @@ class GoogleContact(object):
 def main(argv=None):
 
     # Parse command line arguments
-    arguments = docopt(__doc__, version='Google Contacts Filtering 0.1')
+    arguments = docopt(
+        __doc__,
+        version='Google Contacts Filtering %s' % __version__)
 
     # Parse input csv file
-    gcontact = GoogleContact(arguments.get('CSV'))
+    gcontact = GoogleContact(
+        arguments.get('CSV'),
+        debug=arguments.get('--debug'))
 
     # Delete empty columns
     gcontact.delete_empty_columns()
 
     # Core part: filtering
     gcontact.filter((
+        'has_phone',
         'has_name',
-        'has_phone'
     ))
 
     # Export data
