@@ -1,3 +1,4 @@
+docopt==0.6.1
 flake8==1.7.0
 tablib==0.9.11
 wsgiref==0.1.2

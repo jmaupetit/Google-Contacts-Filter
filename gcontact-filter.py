@@ -1,16 +1,18 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Google Contact Filter
+"""Google Contacts Filter
 
 Usage:
-    gcontact-filter.py csv
+    gcontacts-filter.py [-ehv] CSV
 
 Options:
-    -h --help     Show this screen.
-    -e --export   Export filtered address book.
+    -e --export     Export filtered address book.
+    -h --help       Show this screen.
+    -v --version    Show version.
+
 """
 
-import argparse
 import sys
 import csv
 import codecs
@@ -18,6 +20,7 @@ import os.path
 import logging
 import copy
 
+from docopt import docopt
 from tablib.core import Row, Dataset
 
 
@@ -49,7 +52,6 @@ class GoogleContactRow(Row):
             'Phone 3 - Value',
         )
         return self.has_fields(fields)
-
 
 
 class GoogleContactDataset(Dataset):
@@ -168,29 +170,28 @@ class GoogleContact(object):
         self.filtered_data = copy.copy(self.data)
 
         for column in self.data.headers:
-            if not len( [ val for val in self.data[column] if val ]):
+            if not len([val for val in self.data[column] if val]):
                 self.logger.debug('Will delete column %s', column)
                 del(self.filtered_data[column])
 
     def filter(self, filters=list()):
         """
-        We only consider rows containing data at least for one of the selected fields
+        We only consider rows containing data at least for one of the selected
+        fields.
         """
-        self.logger.info('Will filter data based on : %s',
-            ", ".join(filters)
-        )
+        self.logger.info('Will filter data based on : %s', ", ".join(filters))
 
         filtered_data = GoogleContactDataset()
         filtered_data.headers = copy.copy(self.filtered_data.headers)
 
-        for index,row in enumerate(self.filtered_data._data):
+        for index, row in enumerate(self.filtered_data._data):
             skip = True
             gRow = GoogleContactRow(headers=filtered_data.headers, row=row)
 
             # Apply filters
             for _filter in filters:
                 # This row contains data for selected field
-                if getattr(gRow,_filter)():
+                if getattr(gRow, _filter)():
                     skip = False
                     break
             if skip:
@@ -201,11 +202,11 @@ class GoogleContact(object):
 
         self.filtered_data = filtered_data
 
-        self.logger.info('Original data: %d rows - Filtered data: %d rows',
+        self.logger.info(
+            'Original data: %d rows - Filtered data: %d rows',
             len(self.data),
             len(self.filtered_data)
         )
-
 
     def export(self):
 
@@ -215,27 +216,26 @@ class GoogleContact(object):
 
         print self.filtered_data.csv
 
+
 def main(argv=None):
 
-    # CLI
-    parser = argparse.ArgumentParser(
-        description='Filter exported google contacts')
-    parser.add_argument('csv_path', help="Google contact CSV file")
-    parser.add_argument('--field', help="Field to filter on")
-    parser.add_argument('--export', help="Field to filter on")
+    # Parse command line arguments
+    arguments = docopt(__doc__, version='Google Contacts Filtering 0.1')
 
-    args = parser.parse_args()
+    # Parse input csv file
+    gcontact = GoogleContact(arguments.get('CSV'))
 
-    gcontact = GoogleContact(args.csv_path)
+    # Delete empty columns
     gcontact.delete_empty_columns()
 
-    if args.field:
-        gcontact.filter((
-            'has_name',
-            'has_phone'
-        ))
+    # Core part: filtering
+    gcontact.filter((
+        'has_name',
+        'has_phone'
+    ))
 
-    if args.export:
+    # Export data
+    if arguments.get('--export'):
         gcontact.export()
 
     return 1
