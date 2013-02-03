@@ -4,14 +4,14 @@
 """Google Contacts Filter
 
 Usage:
-    gcontacts-filter.py [-ehdv] CSV
+    gcontacts-filter.py [-ehdvt TAGS] CSV
 
 Options:
-    -e --export     Export filtered address book.
-    -h --help       Show this screen.
-    -d --debug      Debug mode.
-    -v --version    Show version.
-
+    -t TAGS --tags=TAGS     Filtering tags (coma separated, e.g. phone,name ).
+    -e --export             Export filtered address book.
+    -h --help               Show this screen.
+    -d --debug              Debug mode.
+    -v --version            Show version.
 """
 
 import sys
@@ -182,11 +182,18 @@ class GoogleContact(object):
                 tags = []
                 for tagger in taggers:
                     tags += getattr(gRow, tagger)()
-                self.logger.debug('row %d tags %s', row_num, gRow.tags)
+                tags = list(set(tags))
                 data.append(gRow, tags=tags)
+                self.logger.debug('row %d tags %s', row_num, tags)
 
         self.data = data
-        self.logger.info('File columns are:\n%s', "\n".join(self.data.headers))
+        self.logger.debug('File columns are:\n%s', "\n".join(self.data.headers))
+
+    def cleanup(self):
+        """
+        Cleanup non tagged fields
+        """
+        pass
 
     def filter(self, filters=list()):
         """
@@ -225,7 +232,9 @@ def main(argv=None):
         debug=arguments.get('--debug'))
 
     # Core part: filtering
-    gcontact.filter(['phone'])
+    tags = arguments.get('--tags').split(',')
+    if tags:
+        gcontact.filter(tags)
 
     # Export data
     if arguments.get('--export'):
