@@ -56,6 +56,13 @@ class GoogleContactRow(Row):
         super(GoogleContactRow, self).__init__(row=row, tags=tags)
         self.headers = headers
 
+    def select_fields(self, pattern):
+        fields = []
+        for field in self.headers:
+            if re.match(pattern, field):
+                fields.append(field)
+        return fields
+
     def has_fields(self, fields, tags=list(), callbacks=list()):
         """
         Check whether the current line has a data in fields. Apply
@@ -72,16 +79,35 @@ class GoogleContactRow(Row):
         return valid_tags
 
     def has_name(self):
-        fields = ('Name',)
+        fields = self.select_fields('Name')
         return self.has_fields(fields, ['name'])
 
     def has_phone(self, callbacks=('format_phone',)):
-        fields = (
-            'Phone 1 - Value',
-            'Phone 2 - Value',
-            'Phone 3 - Value',
-        )
+        fields = self.select_fields('Phone [0-9]+ - Value')
         return self.has_fields(fields, ['phone'], callbacks)
+
+    def clean_fields(self, pattern):
+        """
+        Remove selected fields data
+        """
+        fields = self.select_fields(pattern)
+
+        # Clean data
+        for field in fields:
+            index = self.headers.index(field)
+            self._row[index] = ''
+
+    def standard_cleanup(self):
+        """
+        Cleanup non tagged fields
+        """
+        pattern = '|'.join(('^Address',
+                            '^Group Membership',
+                            '^Website',
+                            '^Relation',
+                            '^Birthday',
+                            '^Notes'))
+        self.clean_fields(pattern)
 
 
 class GoogleContact(object):
@@ -179,6 +205,7 @@ class GoogleContact(object):
                     data.headers = row
                     continue
                 gRow = GoogleContactRow(headers=data.headers, row=row)
+                gRow.standard_cleanup()
                 tags = []
                 for tagger in taggers:
                     tags += getattr(gRow, tagger)()
@@ -187,13 +214,8 @@ class GoogleContact(object):
                 self.logger.debug('row %d tags %s', row_num, tags)
 
         self.data = data
-        self.logger.debug('File columns are:\n%s', "\n".join(self.data.headers))
-
-    def cleanup(self):
-        """
-        Cleanup non tagged fields
-        """
-        pass
+        self.logger.debug(
+            'File columns are:\n%s', "\n".join(self.data.headers))
 
     def filter(self, filters=list()):
         """
