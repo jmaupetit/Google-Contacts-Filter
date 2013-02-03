@@ -19,7 +19,7 @@ import csv
 import codecs
 import os.path
 import logging
-import copy
+import re
 
 from docopt import docopt
 from tablib.core import Row, Dataset
@@ -40,7 +40,7 @@ def format_phone(value):
     for char in (' ', '(', ')'):
         value = value.replace(char, '')
     # International numbers to local (french)
-    value = value.replace('+33', '0')
+    value = re.sub('^0', '+33', value)
     # Restore multiple item values
     value = value.replace(':::', ' ::: ')
     return value
@@ -56,24 +56,24 @@ class GoogleContactRow(Row):
         super(GoogleContactRow, self).__init__(row=row, tags=tags)
         self.headers = headers
 
-    def has_fields(self, fields, callbacks=list()):
+    def has_fields(self, fields, tags=list(), callbacks=list()):
         """
         Check whether the current line has a data in fields. Apply
         callbacks if True.
         """
-        has = False
+        valid_tags = list()
         for field in fields:
             index = self.headers.index(field)
             if self._row[index].strip():
-                has = True
+                valid_tags += tags
                 for callback in callbacks:
                     self._row[index] = eval('%s("%s")' % (
                         callback, self._row[index]))
-        return has
+        return valid_tags
 
     def has_name(self):
         fields = ('Name',)
-        return self.has_fields(fields)
+        return self.has_fields(fields, ['name'])
 
     def has_phone(self, callbacks=('format_phone',)):
         fields = (
@@ -81,7 +81,7 @@ class GoogleContactRow(Row):
             'Phone 2 - Value',
             'Phone 3 - Value',
         )
-        return self.has_fields(fields, callbacks)
+        return self.has_fields(fields, ['phone'], callbacks)
 
 
 class GoogleContact(object):
@@ -94,6 +94,11 @@ class GoogleContact(object):
         self.data = None
         self.debug = debug
 
+        # Tags
+        self.taggers = (
+            'has_name',
+            'has_phone',)
+
         # set the logger
         self._set_logger()
 
@@ -102,7 +107,7 @@ class GoogleContact(object):
         self.to_utf8()
 
         # Parse the data
-        self.parse()
+        self.parse(taggers=self.taggers)
 
     def _set_logger(self):
         """
@@ -154,7 +159,7 @@ class GoogleContact(object):
                     dst_file.write(contents)
         self.csv_path = dst_path
 
-    def parse(self):
+    def parse(self, taggers=list()):
         """
         Open the csv file and dump it in a tablib.Dataset object
         """
@@ -173,7 +178,12 @@ class GoogleContact(object):
                 if row_num == 0:
                     data.headers = row
                     continue
-                data.append(row)
+                gRow = GoogleContactRow(headers=data.headers, row=row)
+                tags = []
+                for tagger in taggers:
+                    tags += getattr(gRow, tagger)()
+                self.logger.debug('row %d tags %s', row_num, gRow.tags)
+                data.append(gRow, tags=tags)
 
         self.data = data
         self.logger.info('File columns are:\n%s', "\n".join(self.data.headers))
@@ -185,29 +195,7 @@ class GoogleContact(object):
         """
         self.logger.info('Will filter data based on : %s', ", ".join(filters))
 
-        filtered_data = Dataset()
-        filtered_data.headers = copy.copy(self.data.headers)
-
-        for index, row in enumerate(self.data._data):
-            skip = False
-            gRow = GoogleContactRow(headers=filtered_data.headers, row=row)
-
-            # Apply filters
-            tests = [True] * len(filters)
-            for i, _filter in enumerate(filters):
-                # This row contains data for selected field
-                if getattr(gRow, _filter)():
-                    tests[i] = False
-            if True in tests:
-                skip = True
-            if skip:
-                self.logger.debug(
-                    'Skip filtered row %d %s\n%s', index, str(tests), row)
-                continue
-
-            filtered_data.append(gRow)
-
-        self.filtered_data = filtered_data
+        self.filtered_data = self.data.filter(filters)
 
         self.logger.info(
             'Original data: %d rows - Filtered data: %d rows',
@@ -237,10 +225,7 @@ def main(argv=None):
         debug=arguments.get('--debug'))
 
     # Core part: filtering
-    gcontact.filter((
-        'has_phone',
-        'has_name',
-    ))
+    gcontact.filter(['phone'])
 
     # Export data
     if arguments.get('--export'):
