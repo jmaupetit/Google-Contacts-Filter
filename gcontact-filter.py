@@ -41,6 +41,7 @@ def format_phone(value):
         value = value.replace(char, '')
     # International numbers to local (french)
     value = re.sub('^0', '+33', value)
+    value = re.sub(':::0', ':::+33', value)
     # Restore multiple item values
     value = value.replace(':::', ' ::: ')
     return value
@@ -106,6 +107,7 @@ class GoogleContactRow(Row):
                             '^Website',
                             '^Relation',
                             '^Birthday',
+                            'Nickname',
                             '^Notes'))
         self.clean_fields(pattern)
 
