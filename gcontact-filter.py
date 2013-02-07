@@ -52,7 +52,7 @@ def format_phone(value):
 def format_index(name):
     name = name.strip()
     name = name.lower()
-    name = re.sub('[^a-z]','-', name)
+    name = re.sub('[^a-z]', '-', name)
     return name
 
 
@@ -60,8 +60,9 @@ def merge_lists(src, dest):
     out = []
     if len(src) != len(dest):
         sys.exit('Cannot merge rows of different size')
-    out = [ d+' ::: '+s if s and d != s else d for s,d in zip(src,dest) ]
+    out = [d+' ::: '+s if s and d != s else d for s, d in zip(src, dest)]
     return out
+
 
 class GoogleContactRow(Row):
     """
@@ -131,10 +132,7 @@ class GoogleContactRow(Row):
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
-    def __init__(self, csv_path,
-            drop=False,
-            merge=False,
-            debug=False):
+    def __init__(self, csv_path, drop=False, merge=False, debug=False):
 
         # Set object attributes
         self.csv_path = csv_path
@@ -246,26 +244,31 @@ class GoogleContact(object):
                 # Empty index
                 # drop this row
                 if not index:
-                    self.logger.warning('Ignored row without index (%(row_num)d)' %
-                        {'row_num':row_num})
+                    self.logger.warning(
+                        'Ignored row without index (%(row_num)d)' %
+                        {'row_num': row_num})
                     continue
 
                 # Duplicate?
                 if self.is_duplicate(index):
-                    self.logger.warning('Found duplicate row for %(name)s (num: %(row_num)d)' %
-                        {'name':index, 'row_num':row_num})
+                    self.logger.warning(
+                        'Found duplicate row for %(name)s (num: %(row_num)d)' %
+                        {'name': index, 'row_num': row_num})
                     # Drop this row
                     if self.drop:
-                        self.logger.debug('Dropped duplicate row %(row_num)d' %
-                        {'row_num':row_num})
+                        self.logger.debug(
+                            'Dropped duplicate row %(row_num)d' %
+                            {'row_num': row_num})
                         continue
 
                     # Merge this row
                     if self.merge:
                         row_dst = self.hash.index(index)
                         data[row_dst] = merge_lists(gRow, data[row_dst])
-                        self.logger.debug('Merged duplicate row %(row_src)d with %(row_dst)d' %
-                        {'row_src':row_num, 'row_dst':row_dst})
+                        self.logger.debug(
+                            'Merged duplicate row %(row_src)d with \
+                                %(row_dst)d' %
+                            {'row_src': row_num, 'row_dst': row_dst})
                         continue
 
                 self.hash += (index,)
