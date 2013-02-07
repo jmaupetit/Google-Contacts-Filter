@@ -4,11 +4,13 @@
 """Google Contacts Filter
 
 Usage:
-    gcontacts-filter.py [-ehdvt TAGS] CSV
+    gcontacts-filter.py [-eDMhdvt TAGS] CSV
 
 Options:
     -t TAGS --tags=TAGS     Filtering tags (coma separated, e.g. phone,name ).
     -e --export             Export filtered address book.
+    -D --drop               Drop duplicates
+    -M --merge              Merge duplicates
     -h --help               Show this screen.
     -d --debug              Debug mode.
     -v --version            Show version.
@@ -46,6 +48,20 @@ def format_phone(value):
     value = value.replace(':::', ' ::: ')
     return value
 
+
+def format_index(name):
+    name = name.strip()
+    name = name.lower()
+    name = re.sub('[^a-z]','-', name)
+    return name
+
+
+def merge_lists(src, dest):
+    out = []
+    if len(src) != len(dest):
+        sys.exit('Cannot merge rows of different size')
+    out = [ d+' ::: '+s if s and d != s else d for s,d in zip(src,dest) ]
+    return out
 
 class GoogleContactRow(Row):
     """
@@ -115,11 +131,17 @@ class GoogleContactRow(Row):
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
-    def __init__(self, csv_path, debug=False):
+    def __init__(self, csv_path,
+            drop=False,
+            merge=False,
+            debug=False):
 
         # Set object attributes
         self.csv_path = csv_path
         self.data = None
+        self.hash = ()
+        self.drop = drop
+        self.merge = merge
         self.debug = debug
 
         # Tags
@@ -187,6 +209,11 @@ class GoogleContact(object):
                     dst_file.write(contents)
         self.csv_path = dst_path
 
+    def is_duplicate(self, value):
+        if value in self.hash:
+            return True
+        return False
+
     def parse(self, taggers=list()):
         """
         Open the csv file and dump it in a tablib.Dataset object
@@ -212,6 +239,37 @@ class GoogleContact(object):
                 for tagger in taggers:
                     tags += getattr(gRow, tagger)()
                 tags = list(set(tags))
+
+                # Get the row index
+                index = format_index(gRow[data.headers.index('Name')])
+
+                # Empty index
+                # drop this row
+                if not index:
+                    self.logger.warning('Ignored row without index (%(row_num)d)' %
+                        {'row_num':row_num})
+                    continue
+
+                # Duplicate?
+                if self.is_duplicate(index):
+                    self.logger.warning('Found duplicate row for %(name)s (num: %(row_num)d)' %
+                        {'name':index, 'row_num':row_num})
+                    # Drop this row
+                    if self.drop:
+                        self.logger.debug('Dropped duplicate row %(row_num)d' %
+                        {'row_num':row_num})
+                        continue
+
+                    # Merge this row
+                    if self.merge:
+                        row_dst = self.hash.index(index)
+                        data[row_dst] = merge_lists(gRow, data[row_dst])
+                        self.logger.debug('Merged duplicate row %(row_src)d with %(row_dst)d' %
+                        {'row_src':row_num, 'row_dst':row_dst})
+                        continue
+
+                self.hash += (index,)
+
                 data.append(gRow, tags=tags)
                 self.logger.debug('row %d tags %s', row_num, tags)
 
@@ -253,12 +311,15 @@ def main(argv=None):
     # Parse input csv file
     gcontact = GoogleContact(
         arguments.get('CSV'),
+        drop = arguments.get('--drop'),
+        merge = arguments.get('--merge'),
         debug=arguments.get('--debug'))
 
     # Core part: filtering
-    tags = arguments.get('--tags').split(',')
-    if tags:
-        gcontact.filter(tags)
+    if arguments.get('--tags'):
+        tags = arguments.get('--tags').split(',')
+        if tags:
+            gcontact.filter(tags)
 
     # Export data
     if arguments.get('--export'):
