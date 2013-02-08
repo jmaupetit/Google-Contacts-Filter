@@ -13,8 +13,9 @@ Options:
     -M --merge              Merge duplicates
     -F --fix-emails         Fix multiple email addresses
     -h --help               Show this screen.
+    -v --verbose            Verbose mode.
     -d --debug              Debug mode.
-    -v --version            Show version.
+    -V --version            Show version.
 """
 
 import sys
@@ -112,6 +113,7 @@ class GoogleContactRow(Row):
     def inspect_email(self, fix=False):
         fields = self.select_fields('E-mail [0-9]+ - Value')
 
+        has_multiple = False
         row = self._row
         for field in fields:
             index = self.headers.index(field)
@@ -120,6 +122,7 @@ class GoogleContactRow(Row):
             if len(emails) < 2:
                 continue
 
+            has_multiple = True
             self.logger.debug("Found multiple emails for row %s", row)
 
             if not fix:
@@ -156,7 +159,7 @@ class GoogleContactRow(Row):
                 'emails': filtered_emails,
                 'name': self.get_name()})
 
-        return row
+        return row, has_multiple
 
     def clean_fields(self, pattern):
         """
@@ -186,7 +189,7 @@ class GoogleContactRow(Row):
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
-    def __init__(self, csv_path, drop=False, merge=False, debug=False):
+    def __init__(self, csv_path, drop=False, merge=False, verbose=False, debug=False):
 
         # Set object attributes
         self.csv_path = csv_path
@@ -194,6 +197,7 @@ class GoogleContact(object):
         self.hash = ()
         self.drop = drop
         self.merge = merge
+        self.verbose = verbose
         self.debug = debug
 
         # Tags
@@ -220,8 +224,10 @@ class GoogleContact(object):
         self.logger = logging.getLogger('google-contact')
         if self.debug:
             self.logger.setLevel(logging.DEBUG)
-        else:
+        elif self.verbose:
             self.logger.setLevel(logging.INFO)
+        else:
+            self.logger.setLevel(logging.WARNING)
 
         # create console handler and set level to debug
         ch = logging.StreamHandler()
@@ -298,14 +304,14 @@ class GoogleContact(object):
                 # Empty index
                 # drop this row
                 if not index:
-                    self.logger.warning(
+                    self.logger.info(
                         'Ignored row without index (%(row_num)d)' %
                         {'row_num': row_num})
                     continue
 
                 # Duplicate?
                 if self.is_duplicate(index):
-                    self.logger.warning(
+                    self.logger.info(
                         'Found duplicate row for %(name)s (num: %(row_num)d)' %
                         {'name': index, 'row_num': row_num})
                     # Drop this row
@@ -355,12 +361,30 @@ class GoogleContact(object):
 
         If fix, we manually select relevant email.
         """
+        # Get the number of contacts to fix
+
+        n = 0
         for row_num, row in enumerate(self.filtered_data):
             # Use our row object
             gRow = GoogleContactRow(headers=self.data.headers,
                                     row=row,
                                     logger=self.logger)
-            self.filtered_data[row_num] = gRow.inspect_email(fix=fix)
+            if gRow.inspect_email(fix=False)[1]:
+                n += 1
+
+        self.logger.info('Found %d contact(s) with multiple emails for fix', n)
+
+        c = 0
+        for row_num, row in enumerate(self.filtered_data):
+            # Use our row object
+            gRow = GoogleContactRow(headers=self.data.headers,
+                                    row=row,
+                                    logger=self.logger)
+            self.filtered_data[row_num], has_multiple = gRow.inspect_email(
+                fix=fix)
+            if has_multiple:
+                c += 1
+                self.logger.info('Fixed contact email %d on %d', c, n)
 
     def export(self):
 
@@ -383,6 +407,7 @@ def main(argv=None):
         arguments.get('CSV'),
         drop=arguments.get('--drop'),
         merge=arguments.get('--merge'),
+        verbose=arguments.get('--verbose'),
         debug=arguments.get('--debug'))
 
     # Core part: filtering
@@ -392,7 +417,8 @@ def main(argv=None):
             gcontact.filter(tags)
 
     # Multiple email inspection
-    gcontact.inspect_email(fix=arguments.get('--fix-emails'))
+    if arguments.get('--fix-emails'):
+        gcontact.inspect_email(fix=True)
 
     # Export data
     if arguments.get('--export'):
