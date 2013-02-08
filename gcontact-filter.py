@@ -4,13 +4,14 @@
 """Google Contacts Filter
 
 Usage:
-    gcontacts-filter.py [-eDMhdvt TAGS] CSV
+    gcontacts-filter.py [-eDMFhdvt TAGS] CSV
 
 Options:
     -t TAGS --tags=TAGS     Filtering tags (coma separated, e.g. phone,name ).
     -e --export             Export filtered address book.
     -D --drop               Drop duplicates
     -M --merge              Merge duplicates
+    -F --fix-emails         Fix multiple email addresses
     -h --help               Show this screen.
     -d --debug              Debug mode.
     -v --version            Show version.
@@ -69,10 +70,14 @@ class GoogleContactRow(Row):
     Add tag methods for rows
     """
 
-    def __init__(self, row=list(), tags=list(), headers=list()):
+    def __init__(self, row=list(), tags=list(), headers=list(), logger=None):
 
         super(GoogleContactRow, self).__init__(row=row, tags=tags)
         self.headers = headers
+        self.logger = logger
+
+    def get_name(self, field='Name'):
+        return self._row[self.headers.index(field)]
 
     def select_fields(self, pattern):
         fields = []
@@ -84,7 +89,7 @@ class GoogleContactRow(Row):
     def has_fields(self, fields, tags=list(), callbacks=list()):
         """
         Check whether the current line has a data in fields. Apply
-        callbacks if True.
+        callbacks if True and tag the line.
         """
         valid_tags = list()
         for field in fields:
@@ -103,6 +108,47 @@ class GoogleContactRow(Row):
     def has_phone(self, callbacks=('format_phone',)):
         fields = self.select_fields('Phone [0-9]+ - Value')
         return self.has_fields(fields, ['phone'], callbacks)
+
+    def inspect_email(self, fix=False):
+        fields = self.select_fields('E-mail [0-9]+ - Value')
+
+        row = self._row
+        for field in fields:
+            index = self.headers.index(field)
+            emails = [e.strip() for e in row[index].split(":::")]
+
+            if len(emails) < 2:
+                continue
+
+            self.logger.debug("Found multiple emails for row %s", row)
+
+            if not fix:
+                continue
+
+            filtered_emails = []
+            # Try to fix email
+            for email in emails:
+                keep = False
+                while True:
+                    # Prompt
+                    p = "Contact [%(name)s] - keep %(email)s (y/N)? " % {
+                        'name': self.get_name(), 'email': email}
+                    # Response
+                    r = raw_input(p)
+                    if r.strip() == 'y':
+                        keep = True
+                    break
+                # We keep this address
+                if keep:
+                    filtered_emails.append(email)
+            # Store filtered emails
+            row[index] = filtered_emails
+            self.logger.info('[%(field)s] kept <%(emails)s> for %(name)s' % {
+                'field': field,
+                'emails': filtered_emails,
+                'name': self.get_name()})
+
+        return row
 
     def clean_fields(self, pattern):
         """
@@ -266,9 +312,8 @@ class GoogleContact(object):
                         row_dst = self.hash.index(index)
                         data[row_dst] = merge_lists(gRow, data[row_dst])
                         self.logger.debug(
-                            'Merged duplicate row %(row_src)d with \
-                                %(row_dst)d' %
-                            {'row_src': row_num, 'row_dst': row_dst})
+                            'Merged duplicate row %(row_src)d with %(row_dst)d'
+                            % {'row_src': row_num, 'row_dst': row_dst})
                         continue
 
                 self.hash += (index,)
@@ -295,6 +340,20 @@ class GoogleContact(object):
             len(self.filtered_data)
         )
 
+    def inspect_email(self, fix=True):
+        """
+        Inspect if multiple emails have been defined for an email
+        field.
+
+        If fix, we manually select relevant email.
+        """
+        for row_num, row in enumerate(self.filtered_data):
+            # Use our row object
+            gRow = GoogleContactRow(headers=self.data.headers,
+                                    row=row,
+                                    logger=self.logger)
+            self.filtered_data[row_num] = gRow.inspect_email(fix=fix)
+
     def export(self):
 
         if not hasattr(self, 'filtered_data'):
@@ -314,8 +373,8 @@ def main(argv=None):
     # Parse input csv file
     gcontact = GoogleContact(
         arguments.get('CSV'),
-        drop = arguments.get('--drop'),
-        merge = arguments.get('--merge'),
+        drop=arguments.get('--drop'),
+        merge=arguments.get('--merge'),
         debug=arguments.get('--debug'))
 
     # Core part: filtering
@@ -323,6 +382,9 @@ def main(argv=None):
         tags = arguments.get('--tags').split(',')
         if tags:
             gcontact.filter(tags)
+
+    # Multiple email inspection
+    gcontact.inspect_email(fix=arguments.get('--fix-emails'))
 
     # Export data
     if arguments.get('--export'):
