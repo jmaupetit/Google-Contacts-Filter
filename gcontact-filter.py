@@ -126,6 +126,7 @@ class GoogleContactRow(Row):
                 continue
 
             filtered_emails = []
+            abort = False
             # Try to fix email
             for email in emails:
                 keep = False
@@ -134,13 +135,20 @@ class GoogleContactRow(Row):
                     p = "Contact [%(name)s] - keep %(email)s (y/N)? " % {
                         'name': self.get_name(), 'email': email}
                     # Response
-                    r = raw_input(p)
+                    try:
+                        r = raw_input(p)
+                    except EOFError:
+                        abort = True
+                        print ''
+                        break
                     if r.strip() == 'y':
                         keep = True
                     break
                 # We keep this address
                 if keep:
                     filtered_emails.append(email)
+                if abort:
+                    break
             # Store filtered emails
             row[index] = filtered_emails
             self.logger.info('[%(field)s] kept <%(emails)s> for %(name)s' % {
