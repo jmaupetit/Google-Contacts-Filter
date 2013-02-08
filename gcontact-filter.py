@@ -4,18 +4,18 @@
 """Google Contacts Filter
 
 Usage:
-    gcontacts-filter.py [-eDMFhdvt TAGS] CSV
+    gcontacts-filter.py [-eDMFhdv] [-t TAGS] CSV [-o OUTPUT]
 
 Options:
-    -t TAGS --tags=TAGS     Filtering tags (coma separated, e.g. phone,name ).
-    -e --export             Export filtered address book.
-    -D --drop               Drop duplicates
-    -M --merge              Merge duplicates
-    -F --fix-emails         Fix multiple email addresses
-    -h --help               Show this screen.
-    -v --verbose            Verbose mode.
-    -d --debug              Debug mode.
-    -V --version            Show version.
+    -t TAGS --tags=TAGS        Filtering tags (coma separated).
+    -o OUTPUT --output=OUTPUT  Write filtered address book to file.
+    -D --drop                  Drop duplicates
+    -M --merge                 Merge duplicates
+    -F --fix-emails            Fix multiple email addresses
+    -h --help                  Show this screen.
+    -v --verbose               Verbose mode.
+    -d --debug                 Debug mode.
+    -V --version               Show version.
 """
 
 import sys
@@ -189,7 +189,9 @@ class GoogleContactRow(Row):
 class GoogleContact(object):
     """docstring for GoogleContact"""
 
-    def __init__(self, csv_path, drop=False, merge=False, verbose=False, debug=False):
+    def __init__(self, csv_path,
+                 drop=False, merge=False,
+                 verbose=False, debug=False):
 
         # Set object attributes
         self.csv_path = csv_path
@@ -386,13 +388,19 @@ class GoogleContact(object):
                 c += 1
                 self.logger.info('Fixed contact email %d on %d', c, n)
 
-    def export(self):
+    def export(self, outFile=None):
 
         if not hasattr(self, 'filtered_data'):
             self.logger.error('Nothing to export')
             return
 
-        print self.filtered_data.csv
+        if outFile is None:
+            print >> sys.stdout, self.filtered_data.csv
+            return
+
+        oFile = open(outFile, 'w')
+        oFile.write(self.filtered_data.csv)
+        oFile.close()
 
 
 def main(argv=None):
@@ -421,8 +429,10 @@ def main(argv=None):
         gcontact.inspect_email(fix=True)
 
     # Export data
-    if arguments.get('--export'):
-        gcontact.export()
+    outFile = None
+    if arguments.get('--output'):
+        outFile = arguments.get('--output')
+    gcontact.export(outFile=outFile)
 
     return 1
 
