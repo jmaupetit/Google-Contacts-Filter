@@ -153,7 +153,10 @@ class GoogleContactRow(Row):
                 if abort:
                     break
             # Store filtered emails
-            row[index] = filtered_emails
+            if len(filtered_emails):
+                row[index] = ' ::: '.join(filtered_emails)
+            else:
+                row[index] = None
             self.logger.info('[%(field)s] kept <%(emails)s> for %(name)s' % {
                 'field': field,
                 'emails': filtered_emails,
@@ -374,7 +377,8 @@ class GoogleContact(object):
             if gRow.inspect_email(fix=False)[1]:
                 n += 1
 
-        self.logger.info('Found %d contact(s) with multiple emails for fix', n)
+        mess = "Found %d contact(s) with multiple emails to fix\n" % n
+        print >> sys.stdout, mess
 
         c = 0
         for row_num, row in enumerate(self.filtered_data):
@@ -386,7 +390,7 @@ class GoogleContact(object):
                 fix=fix)
             if has_multiple:
                 c += 1
-                self.logger.info('Fixed contact email %d on %d', c, n)
+                print >> sys.stdout, 'Fixed contact email %d on %d\n' % (c, n)
 
     def export(self, outFile=None):
 
