@@ -175,6 +175,16 @@ class GoogleContactRow(Row):
             index = self.headers.index(field)
             self._row[index] = ''
 
+    def format_names(self):
+        """
+        Format names: TitleCase
+        """
+        fields = self.select_fields('.*Name.*')
+
+        for field in fields:
+            index = self.headers.index(field)
+            self._row[index] = self._row[index].title()
+
     def standard_cleanup(self):
         """
         Cleanup non tagged fields
@@ -298,6 +308,7 @@ class GoogleContact(object):
                     continue
                 gRow = GoogleContactRow(headers=data.headers, row=row)
                 gRow.standard_cleanup()
+                gRow.format_names()
                 tags = []
                 for tagger in taggers:
                     tags += getattr(gRow, tagger)()
