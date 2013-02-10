@@ -135,11 +135,11 @@ class GoogleContactRow(Row):
                 keep = False
                 while True:
                     # Prompt
-                    p = "Contact [%(name)s] - keep %(email)s (y/N)? " % {
+                    p = u"Contact [%(name)s] - keep %(email)s (y/N)? " % {
                         'name': self.get_name(), 'email': email}
                     # Response
                     try:
-                        r = raw_input(p)
+                        r = raw_input(p.encode('ascii', 'ignore'))
                     except EOFError:
                         abort = True
                         print ''
