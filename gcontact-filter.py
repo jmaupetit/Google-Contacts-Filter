@@ -19,7 +19,6 @@ Options:
 """
 
 import sys
-import csv
 import codecs
 import os.path
 import logging
@@ -28,6 +27,7 @@ import re
 from docopt import docopt
 from tablib.core import Row, Dataset
 
+from utils import UnicodeReader
 
 __title__ = 'gcontact-filter'
 __version__ = '0.1.1'
@@ -300,7 +300,7 @@ class GoogleContact(object):
 
         with open(self.csv_path, 'rb') as csv_file:
 
-            google_contact = csv.reader(csv_file)
+            google_contact = UnicodeReader(csv_file)
 
             for row_num, row in enumerate(google_contact):
                 if row_num == 0:
